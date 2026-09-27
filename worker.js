@@ -7,6 +7,7 @@ const registeredEndpoints = {
   "cust-001": "http://localhost:3000/mock-success",
   "cust-002": "http://localhost:3000/mock-fail",
   "cust-003": "http://localhost:3000/mock-timeout",
+  "cust-004": "http://localhost:3000/mock-unstable",
 };
 
 const getNextRetryAt = (retryCount) => {
@@ -32,57 +33,85 @@ const startWorker = async () => {
       return;
     }
 
-    console.log(`[Worker] Memproses ${events.length} event...`);
+    console.log(
+      `[Worker] Menemukan ${events.length} event. Mulai memproses HTTP...`,
+    );
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       events.map(async (event) => {
         const url = registeredEndpoints[event.customer_id];
 
         if (!url) {
-          await prisma.event.update({
-            where: { id: event.id },
-            data: { status: "failed" },
-          });
-          return;
+          return { id: event.id, status: "failed", error: "URL not found" };
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(event.data);
+        } catch (err) {
+          return {
+            id: event.id,
+            status: "failed",
+            error: "Invalid JSON format",
+          };
         }
 
         try {
-          const payload = JSON.parse(event.data);
           const response = await axios.post(url, payload, { timeout: 10000 });
-
           if (response.status >= 200 && response.status < 300) {
-            await prisma.event.update({
-              where: { id: event.id },
-              data: { status: "delivered", last_retry_at: new Date() },
-            });
-            console.log(`[Worker] Sukses mengirim event ${event.id}`);
-          } else {
-            throw new Error(`HTTP Status ${response.status}`);
+            return {
+              id: event.id,
+              status: "delivered",
+              retry_count: event.retry_count,
+            };
           }
+          throw new Error(`HTTP Status ${response.status}`);
         } catch (error) {
-          const newRetryCount = event.retry_count + 1;
-          console.log(
-            `[Worker] Gagal mengirim event ${event.id}. Retry ke-${newRetryCount}`,
-          );
-
-          if (newRetryCount >= 5) {
-            await prisma.event.update({
-              where: { id: event.id },
-              data: { status: "failed", last_retry_at: new Date() },
-            });
-          } else {
-            await prisma.event.update({
-              where: { id: event.id },
-              data: {
-                retry_count: newRetryCount,
-                next_retry_at: getNextRetryAt(newRetryCount),
-                last_retry_at: new Date(),
-              },
-            });
-          }
+          return {
+            id: event.id,
+            status: "retry",
+            retry_count: event.retry_count,
+            error: error.message,
+          };
         }
       }),
     );
+
+    const updateOperations = results.map((result) => {
+      const data = result.value;
+
+      if (data.status === "delivered") {
+        return prisma.event.update({
+          where: { id: data.id },
+          data: { status: "delivered", last_retry_at: new Date() },
+        });
+      }
+
+      if (data.status === "failed") {
+        return prisma.event.update({
+          where: { id: data.id },
+          data: { status: "failed", last_retry_at: new Date() },
+        });
+      }
+
+      const newRetryCount = data.retry_count + 1;
+      const isPermanentFail = newRetryCount >= 5;
+
+      return prisma.event.update({
+        where: { id: data.id },
+        data: {
+          status: isPermanentFail ? "failed" : "pending",
+          retry_count: newRetryCount,
+          last_retry_at: new Date(),
+          ...(isPermanentFail
+            ? {}
+            : { next_retry_at: getNextRetryAt(newRetryCount) }),
+        },
+      });
+    });
+
+    await prisma.$transaction(updateOperations);
+    console.log(`[Worker] Berhasil update ${events.length} event.`);
   } catch (error) {
     console.error("[Worker] Fatal Error:", error);
   } finally {
