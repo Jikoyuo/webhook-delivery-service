@@ -12,8 +12,7 @@ const registeredEndpoints = {
 
 const getNextRetryAt = (retryCount) => {
   const now = new Date();
-  // const delaysInMinutes = [1, 5, 30, 120, 360];
-  const delaysInMinutes = [0, 1, 2, 3, 4];
+  const delaysInMinutes = [1, 5, 30, 120, 360];
   const delay = delaysInMinutes[retryCount] || 0;
   return new Date(now.getTime() + delay * 60000);
 };
