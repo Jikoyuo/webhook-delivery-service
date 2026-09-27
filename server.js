@@ -54,6 +54,18 @@ app.post("/mock-timeout", (req, res) => {
   setTimeout(() => res.status(200).json({ message: "Too Late" }), 15000);
 });
 
+let unstableTry = 0;
+app.post("/mock-unstable", (req, res) => {
+  unstableTry++;
+  if (unstableTry <= 2) {
+    return res.status(500).json({ error: "Server down." });
+  } else {
+    //reset nilai untuk simulasi unstable
+    unstableTry = 0;
+    return res.status(200).json({ message: "Server kembali hidup." });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
