@@ -1,0 +1,57 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Webhook Delivery Service",
+    "version": "1.0.0",
+    "description": "API untuk menerima event dan mengecek status pengiriman webhook."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
+  "paths": {
+    "/events": {
+      "post": {
+        "summary": "Menerima event baru untuk dikirimkan ke webhook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "customer_id": { "type": "string", "example": "cust-001" },
+                  "payload": {
+                    "type": "object",
+                    "example": { "order_id": 123, "status": "paid" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Accepted" }
+        }
+      }
+    },
+    "/events/{id}": {
+      "get": {
+        "summary": "Mengecek status pengiriman event",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Status event" },
+          "404": { "description": "Not found" }
+        }
+      }
+    }
+  }
+}
