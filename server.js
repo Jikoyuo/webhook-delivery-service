@@ -69,6 +69,6 @@ app.post("/mock-unstable", (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
-  console.log(`Memulai worker...`);
+  console.log(`Memulai worker....`);
   startWorker();
 });
